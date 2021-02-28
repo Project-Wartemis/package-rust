@@ -1,0 +1,4 @@
+mod message;
+
+fn main() {
+}
