@@ -2,6 +2,7 @@ use serde_json::{Result, Value};
 use serde::{Deserialize, Serialize};
 
 type Action = Value;
+type State = Value;
 
 #[derive(Deserialize, Serialize)]
 struct ActionMessage {
@@ -43,9 +44,6 @@ struct StartMessage {
 }
 
 #[derive(Deserialize, Serialize)]
-struct State {}
-
-#[derive(Deserialize, Serialize)]
 struct StateMessage {
 	message: String,
 	game: i32,
@@ -69,8 +67,6 @@ struct StopMessage {
 	message: String,
 	game: i32,
 }
-
-
 
 #[cfg(test)]
 mod tests {
