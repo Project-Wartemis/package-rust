@@ -1,4 +1,4 @@
-use serde_json::{Result, Value};
+use serde_json::Value;
 use serde::{Deserialize, Serialize};
 
 type Action = Value;
@@ -6,7 +6,8 @@ type State = Value;
 
 #[derive(Deserialize, Serialize)]
 struct ActionMessage {
-	message: String,
+	#[serde(rename = "type")]
+	msgType: String,
 	game: i32,
 	key: String,
 	action: Action,
@@ -14,7 +15,8 @@ struct ActionMessage {
 
 #[derive(Deserialize, Serialize)]
 struct ActionMessageEngine {
-	message: String,
+	#[serde(rename = "type")]
+	msgType: String,
 	game: i32,
 	player: String,
 	action: Action,
@@ -22,12 +24,14 @@ struct ActionMessageEngine {
 
 #[derive(Deserialize, Serialize)]
 struct ErrorMessage {
-	message: String,
+	#[serde(rename = "type")]
+	msgType: String,
 }
 
 #[derive(Deserialize, Serialize)]
 struct RegisterMessage {
-	message: String,
+	#[serde(rename = "type")]
+	msgType: String,
 	#[serde(rename = "clientType")]
 	client_type: String,
 	game: String,
@@ -36,7 +40,8 @@ struct RegisterMessage {
 
 #[derive(Deserialize, Serialize)]
 struct StartMessage {
-	message: String,
+	#[serde(rename = "type")]
+	msgType: String,
 	game: i32,
 	players: Vec<i32>,
 	prefix: String,
@@ -45,7 +50,8 @@ struct StartMessage {
 
 #[derive(Deserialize, Serialize)]
 struct StateMessage {
-	message: String,
+	#[serde(rename = "type")]
+	msgType: String,
 	game: i32,
 	key: String,
 	turn: i32,
@@ -55,7 +61,8 @@ struct StateMessage {
 
 #[derive(Deserialize, Serialize)]
 struct StateMessageEngine {
-	message: String,
+	#[serde(rename = "type")]
+	msgType: String,
 	game: i32,
 	turn: i32,
 	players: Vec<String>,
@@ -64,7 +71,8 @@ struct StateMessageEngine {
 
 #[derive(Deserialize, Serialize)]
 struct StopMessage {
-	message: String,
+	#[serde(rename = "type")]
+	msgType: String,
 	game: i32,
 }
 
@@ -85,42 +93,42 @@ mod tests {
 
     #[test]
     fn test_action_message() {
-		let json = r#"{"message":"MSG","game":42,"key":"KEY","action":{"TEST":"TEST"}}"#;
+		let json = r#"{"type":"MSG","game":42,"key":"KEY","action":{"TEST":"TEST"}}"#;
         let message: ActionMessage = serde_json::from_str(json).unwrap();
 		assert_eq!(reserialize(&message, json), true);
 
-		assert_eq!(message.message,"MSG");
+		assert_eq!(message.msgType,"MSG");
 		assert_eq!(message.key,"KEY");
 		assert_eq!(message.game,42);
     }
 
 	#[test]
     fn test_action_message_engine() {
-		let json = r#"{"message":"MSG","game":42,"player":"PLAYER","action":{"TEST":"TEST"}}"#;
+		let json = r#"{"type":"MSG","game":42,"player":"PLAYER","action":{"TEST":"TEST"}}"#;
         let message: ActionMessageEngine = serde_json::from_str(json).unwrap();
 		assert_eq!(reserialize(&message, json), true);
 
-		assert_eq!(message.message,"MSG");
+		assert_eq!(message.msgType,"MSG");
 		assert_eq!(message.player,"PLAYER");
 		assert_eq!(message.game,42);
     }
 
 	#[test]
     fn test_error_message() {
-		let json = r#"{"message":"ERROR"}"#;
+		let json = r#"{"type":"ERROR"}"#;
         let message: ErrorMessage = serde_json::from_str(json).unwrap();
 		assert_eq!(reserialize(&message, json), true);
 
-		assert_eq!(message.message,"ERROR");
+		assert_eq!(message.msgType,"ERROR");
     }
 
 	#[test]
     fn test_register_message() {
-		let json = r#"{"message":"MSG","clientType":"CLIENTTYPE","game":"GAMENAME","name":"NAME"}"#;
+		let json = r#"{"type":"MSG","clientType":"CLIENTTYPE","game":"GAMENAME","name":"NAME"}"#;
         let message: RegisterMessage = serde_json::from_str(json).unwrap();
 		assert_eq!(reserialize(&message, json), true);
 
-		assert_eq!(message.message,"MSG");
+		assert_eq!(message.msgType,"MSG");
 		assert_eq!(message.game,"GAMENAME");
 		assert_eq!(message.client_type,"CLIENTTYPE");
 		assert_eq!(message.name,"NAME");
@@ -128,11 +136,11 @@ mod tests {
 
 	#[test]
     fn test_start_message() {
-		let json = r#"{"message":"MSG","game":42,"players":[0,1],"prefix":"PREFIX","suffix":"SUFFIX"}"#;
+		let json = r#"{"type":"MSG","game":42,"players":[0,1],"prefix":"PREFIX","suffix":"SUFFIX"}"#;
         let message: StartMessage = serde_json::from_str(json).unwrap();
 		assert_eq!(reserialize(&message, json), true);
 
-		assert_eq!(message.message,"MSG");
+		assert_eq!(message.msgType,"MSG");
 		assert_eq!(message.game,42);
 		assert_eq!(message.players,[0,1]);
 		assert_eq!(message.prefix,"PREFIX");
@@ -141,11 +149,11 @@ mod tests {
 
 	#[test]
     fn test_state_message() {
-		let json = r#"{"message":"MSG","game":42,"key":"KEY","turn":0,"move":true,"state":{"STATE":{}}}"#;
+		let json = r#"{"type":"MSG","game":42,"key":"KEY","turn":0,"move":true,"state":{"STATE":{}}}"#;
         let message: StateMessage = serde_json::from_str(json).unwrap();
 		assert_eq!(reserialize(&message, json), true);
 
-		assert_eq!(message.message,"MSG");
+		assert_eq!(message.msgType,"MSG");
 		assert_eq!(message.game,42);
 		assert_eq!(message.key,"KEY");
 		assert_eq!(message.turn,0);
@@ -154,11 +162,11 @@ mod tests {
 
 	#[test]
     fn test_state_message_engine() {
-        let json = r#"{"message":"MSG","game":42,"turn":0,"players":["p1","p2"],"state":{"STATE":{}}}"#;
+        let json = r#"{"type":"MSG","game":42,"turn":0,"players":["p1","p2"],"state":{"STATE":{}}}"#;
 		let message: StateMessageEngine = serde_json::from_str(json).unwrap();
 		assert_eq!(reserialize(&message, json), true);
 
-		assert_eq!(message.message,"MSG");
+		assert_eq!(message.msgType,"MSG");
 		assert_eq!(message.game,42);
 		assert_eq!(message.turn,0);
 		assert_eq!(message.players,["p1","p2"]);
@@ -167,11 +175,11 @@ mod tests {
 
 	#[test]
     fn test_stop_message() {
-		let json = r#"{"message":"MSG","game":42}"#;
+		let json = r#"{"type":"MSG","game":42}"#;
         let message: StopMessage = serde_json::from_str(json).unwrap();
 		assert_eq!(reserialize(&message, json), true);
 
-		assert_eq!(message.message,"MSG");
+		assert_eq!(message.msgType,"MSG");
 		assert_eq!(message.game,42);
     }
 }
