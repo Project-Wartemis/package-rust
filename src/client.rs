@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-type RawMessage = String;
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 enum MessageType {
@@ -14,23 +13,47 @@ enum MessageType {
     EngineState,
 }
 
-type MessageHandler = fn(RawMessage);
+type RawMessage = String;
+type MessageHandler = fn(&RawMessage);
 
-pub struct Client {
-    // started: bool,
-    // connection: i32,  // websocket connection
-    handlers: HashMap<MessageType, MessageHandler>,
+trait Connection {
+    fn read(&self) -> RawMessage;
+    fn write(&self, msg: &RawMessage);
 }
 
-pub fn new_client() -> Client {
+pub struct Client {
+    started: bool,
+    connection: Box<dyn Connection>,  // websocket connection
+    handlers: HashMap<MessageType, MessageHandler>,
+    defaultHandler: MessageHandler,
+}
+
+pub fn new_client(
+        handlers: HashMap<MessageType, MessageHandler>,
+        defaultHandler: MessageHandler,
+        connection: Box<dyn Connection>) -> Client {
     Client {
-        handlers: HashMap::new(),
+        started: false,
+        connection: connection,
+        handlers: handlers,
+        defaultHandler: defaultHandler,
     }
 }
 
+fn parse_raw_message(msg: &RawMessage) -> &MessageType {
+    &MessageType::Action
+}
+
 impl Client {
-    fn add_handler(&mut self, name: MessageType, func: MessageHandler) {
-        self.handlers.insert(name, func);
+    fn handle_raw_message(&self, msg: &RawMessage) {
+        let msgType = parse_raw_message(msg);
+
+        let handler: MessageHandler = self.defaultHandler;
+        if self.handlers.contains_key(msgType) {
+            handler = self.handlers[msgType];
+        }
+
+        handler(msg);
     }
 }
 
@@ -39,14 +62,14 @@ impl Client {
 mod tests {
     use super::*;
 
-    fn dummy(_: String) {}
+    fn dummy_handler(_: &String) {}
 
 	#[test]
     fn test_add_handler() {
-		let mut c = new_client();
-        c.add_handler(MessageType::Action, dummy);
-        assert_eq!(true, c.handlers.contains_key(&MessageType::Action));
+        let handlers: HashMap<MessageType, MessageHandler> = HashMap::new();
+		let c = new_client(handlers, dummy_handler);
+        // assert_eq!(true, c.handlers.contains_key(&MessageType::Action));
 
-        c.handlers[&MessageType::Action]("Test".to_string());
+        // c.handlers[&MessageType::Action]("Test".to_string());
     }
 }
