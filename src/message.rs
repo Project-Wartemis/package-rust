@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 #[serde(tag = "type")]
 #[derive(Serialize, Deserialize,Debug,PartialEq)]
 pub enum Message {
+	Connected		{},
+	RegisterSuccess {id: i32},
 	Action			{ game: i32, key: String, action: Action},
 	Error			{ },
 	Register		{ clientType: String, game: String, name: String},
@@ -37,6 +39,53 @@ mod tests {
 		assert_eq!(result, msg_struct);
 	}
 
+	// Connected
+    #[test]
+    fn message_connected_reserialize() {
+		let msg_struct = get_object_message_connected();
+		reserialize(msg_struct);
+	}
+
+	#[test]
+	fn message_connected_deserialize() {
+		let msg_json = get_string_message_connected();
+		let msg_struct = get_object_message_connected();
+		deserialize_and_validate(msg_struct, &msg_json);
+	}
+
+	fn get_object_message_connected() -> Message {
+		Message::Connected{}
+	}
+
+	fn get_string_message_connected() -> String {
+		r#"{"type": "Connected"}"#.to_string()
+	}
+
+	// RegisterSuccess
+    #[test]
+    fn message_register_success_reserialize() {
+		let msg_struct = get_object_message_register_success();
+		reserialize(msg_struct);
+	}
+
+	#[test]
+	fn message_register_success_deserialize() {
+		let msg_json = get_string_message_action();
+		let msg_struct = get_object_message_action();
+		deserialize_and_validate(msg_struct, &msg_json);
+	}
+
+	fn get_object_message_register_success() -> Message {
+		Message::RegisterSuccess{ id: 4884 }
+	}
+
+	fn get_string_message_register_success() -> String {
+		r#"{
+			"type": "RegisterSuccess",
+			"id": 4884,
+		}"#.to_string()
+	}
+
 	// Action
     #[test]
     fn message_action_reserialize() {
@@ -66,7 +115,7 @@ mod tests {
 			"key": "key",
 			"action": {"This can be": "anything"}
 		}"#.to_string()
-}
+	}
 
 	// Error
 	#[test]
