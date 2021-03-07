@@ -1,14 +1,75 @@
 use serde_json::Value;
 use serde::{Deserialize, Serialize};
 
+#[derive(Debug)]
 pub struct MessageError {}
 
 pub trait MessageTrait {
 	fn to_json(&self) -> Result<String, MessageError>;
 }
 
+
+#[serde(tag = "type")]
 #[derive(Serialize, Deserialize,Debug,PartialEq)]
-pub struct RegisterSuccess {id: i32}
+pub enum Message {
+	Connected		(Connected),
+	RegisterSuccess (RegisterSuccess),
+	Register 		(Register),
+	Action			(Action),
+	Error 			(Error),
+	Start 			(Start),
+	State 			(State),
+	Stop 			(Stop),
+	EngineAction 	(EngineAction),
+	EngineState 	(EngineState),
+}
+
+type JsonAction = Value;
+type JsonState = Value;
+
+pub fn deserialize_message(json: &String) -> Result<Message, MessageError> {
+	let r = serde_json::from_str(json);
+	match r {
+		Ok(r) => Ok(r),
+		Err(_) => Err(MessageError{}),
+	}
+}
+
+#[derive(Serialize, Deserialize,Debug,PartialEq)]
+pub struct RegisterSuccess {
+	pub id: i32
+}
+
+#[derive(Serialize, Deserialize,Debug,PartialEq)]
+pub struct Connected {}
+
+#[derive(Serialize, Deserialize,Debug,PartialEq)]
+pub struct Register {
+	pub clientType: String,
+	pub game: String,
+	pub name: String
+}
+
+#[derive(Serialize, Deserialize,Debug,PartialEq)]
+pub struct Action	{game: i32, key: String, action: JsonState}
+
+#[derive(Serialize, Deserialize,Debug,PartialEq)]
+pub struct Error 	{ message: String }
+
+#[derive(Serialize, Deserialize,Debug,PartialEq)]
+pub struct Start 	{ game: i32, players: Vec<i32>, prefix: String, suffix: String}
+
+#[derive(Serialize, Deserialize,Debug,PartialEq)]
+pub struct State 	{ game: i32, key: String, turn: i32, r#move: bool, state: JsonState}
+
+#[derive(Serialize, Deserialize,Debug,PartialEq)]
+pub struct Stop 	{ game: i32}
+
+#[derive(Serialize, Deserialize,Debug,PartialEq)]
+pub struct EngineAction {game: i32, player: String, action: JsonAction}
+
+#[derive(Serialize, Deserialize,Debug,PartialEq)]
+pub struct EngineState {game: i32, turn: i32, players: Vec<String>, state: JsonState}
 
 impl MessageTrait for RegisterSuccess {
 	fn to_json(&self) -> Result<String, MessageError> {
@@ -20,9 +81,6 @@ impl MessageTrait for RegisterSuccess {
 	}
 }
 
-#[derive(Serialize, Deserialize,Debug,PartialEq)]
-pub struct Connected {}
-
 impl MessageTrait for Connected {
 	fn to_json(&self) -> Result<String, MessageError> {
 		let r = serde_json::to_string(self);
@@ -32,9 +90,6 @@ impl MessageTrait for Connected {
 		}
 	}
 }
-
-#[derive(Serialize, Deserialize,Debug,PartialEq)]
-pub struct Action { game: i32, key: String, action: JsonState}
 
 impl MessageTrait for Action {
 	fn to_json(&self) -> Result<String, MessageError> {
@@ -46,9 +101,6 @@ impl MessageTrait for Action {
 	}
 }
 
-#[derive(Serialize, Deserialize,Debug,PartialEq)]
-pub struct Error 	{ }
-
 impl MessageTrait for Error {
 	fn to_json(&self) -> Result<String, MessageError> {
 		let r = serde_json::to_string(self);
@@ -58,9 +110,6 @@ impl MessageTrait for Error {
 		}
 	}
 }
-
-#[derive(Serialize, Deserialize,Debug,PartialEq)]
-pub struct Register 	{ clientType: String, game: String, name: String}
 
 impl MessageTrait for Register {
 	fn to_json(&self) -> Result<String, MessageError> {
@@ -72,9 +121,6 @@ impl MessageTrait for Register {
 	}
 }
 
-#[derive(Serialize, Deserialize,Debug,PartialEq)]
-pub struct Start 	{ game: i32, players: Vec<i32>, prefix: String, suffix: String}
-
 impl MessageTrait for Start {
 	fn to_json(&self) -> Result<String, MessageError> {
 		let r = serde_json::to_string(self);
@@ -84,9 +130,6 @@ impl MessageTrait for Start {
 		}
 	}
 }
-
-#[derive(Serialize, Deserialize,Debug,PartialEq)]
-pub struct State 	{ game: i32, key: String, turn: i32, r#move: bool, state: JsonState}
 
 impl MessageTrait for State {
 	fn to_json(&self) -> Result<String, MessageError> {
@@ -98,9 +141,6 @@ impl MessageTrait for State {
 	}
 }
 
-#[derive(Serialize, Deserialize,Debug,PartialEq)]
-pub struct Stop 	{ game: i32}
-
 impl MessageTrait for Stop {
 	fn to_json(&self) -> Result<String, MessageError> {
 		let r = serde_json::to_string(self);
@@ -110,9 +150,6 @@ impl MessageTrait for Stop {
 		}
 	}
 }
-
-#[derive(Serialize, Deserialize,Debug,PartialEq)]
-pub struct EngineAction {game: i32, player: String, action: JsonAction}
 
 impl MessageTrait for EngineAction {
 	fn to_json(&self) -> Result<String, MessageError> {
@@ -124,9 +161,6 @@ impl MessageTrait for EngineAction {
 	}
 }
 
-#[derive(Serialize, Deserialize,Debug,PartialEq)]
-pub struct EngineState {game: i32, turn: i32, players: Vec<String>, state: JsonState}
-
 impl MessageTrait for EngineState {
 	fn to_json(&self) -> Result<String, MessageError> {
 		let r = serde_json::to_string(self);
@@ -136,25 +170,6 @@ impl MessageTrait for EngineState {
 		}
 	}
 }
-
-
-#[serde(tag = "type")]
-#[derive(Serialize, Deserialize,Debug,PartialEq)]
-pub enum Message {
-	Connected		(Connected),
-	RegisterSuccess (RegisterSuccess),
-	Action			(Action),
-	Error 			(Error),
-	Register 		(Register),
-	Start 			(Start),
-	State 			(State),
-	Stop 			(Stop),
-	EngineAction 	(EngineAction),
-	EngineState 	(EngineState),
-}
-
-type JsonAction = Value;
-type JsonState = Value;
 
 #[cfg(test)]
 mod tests {
@@ -268,12 +283,13 @@ mod tests {
     }
 
 	fn get_object_message_error() -> Message {
-		Message::Error(Error{})
+		Message::Error(Error{ message: "You messed up".to_string() })
 	}
 
 	fn get_string_message_error() -> String {
 		r#"{
-			"type": "Error"
+			"type": "Error",
+			"message": "You messed up"
 		}"#.to_string()
 	}
 
