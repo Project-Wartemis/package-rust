@@ -1,24 +1,160 @@
 use serde_json::Value;
 use serde::{Deserialize, Serialize};
 
+pub struct MessageError {}
+
+pub trait MessageTrait {
+	fn to_json(&self) -> Result<String, MessageError>;
+}
+
+#[derive(Serialize, Deserialize,Debug,PartialEq)]
+pub struct RegisterSuccess {id: i32}
+
+impl MessageTrait for RegisterSuccess {
+	fn to_json(&self) -> Result<String, MessageError> {
+		let r = serde_json::to_string(self);
+		match r {
+			Ok(r) => Ok(r),
+			Err(_) => Err(MessageError{}),
+		}
+	}
+}
+
+#[derive(Serialize, Deserialize,Debug,PartialEq)]
+pub struct Connected {}
+
+impl MessageTrait for Connected {
+	fn to_json(&self) -> Result<String, MessageError> {
+		let r = serde_json::to_string(self);
+		match r {
+			Ok(r) => Ok(r),
+			Err(_) => Err(MessageError{}),
+		}
+	}
+}
+
+#[derive(Serialize, Deserialize,Debug,PartialEq)]
+pub struct Action { game: i32, key: String, action: JsonState}
+
+impl MessageTrait for Action {
+	fn to_json(&self) -> Result<String, MessageError> {
+		let r = serde_json::to_string(self);
+		match r {
+			Ok(r) => Ok(r),
+			Err(_) => Err(MessageError{}),
+		}
+	}
+}
+
+#[derive(Serialize, Deserialize,Debug,PartialEq)]
+pub struct Error 	{ }
+
+impl MessageTrait for Error {
+	fn to_json(&self) -> Result<String, MessageError> {
+		let r = serde_json::to_string(self);
+		match r {
+			Ok(r) => Ok(r),
+			Err(_) => Err(MessageError{}),
+		}
+	}
+}
+
+#[derive(Serialize, Deserialize,Debug,PartialEq)]
+pub struct Register 	{ clientType: String, game: String, name: String}
+
+impl MessageTrait for Register {
+	fn to_json(&self) -> Result<String, MessageError> {
+		let r = serde_json::to_string(self);
+		match r {
+			Ok(r) => Ok(r),
+			Err(_) => Err(MessageError{}),
+		}
+	}
+}
+
+#[derive(Serialize, Deserialize,Debug,PartialEq)]
+pub struct Start 	{ game: i32, players: Vec<i32>, prefix: String, suffix: String}
+
+impl MessageTrait for Start {
+	fn to_json(&self) -> Result<String, MessageError> {
+		let r = serde_json::to_string(self);
+		match r {
+			Ok(r) => Ok(r),
+			Err(_) => Err(MessageError{}),
+		}
+	}
+}
+
+#[derive(Serialize, Deserialize,Debug,PartialEq)]
+pub struct State 	{ game: i32, key: String, turn: i32, r#move: bool, state: JsonState}
+
+impl MessageTrait for State {
+	fn to_json(&self) -> Result<String, MessageError> {
+		let r = serde_json::to_string(self);
+		match r {
+			Ok(r) => Ok(r),
+			Err(_) => Err(MessageError{}),
+		}
+	}
+}
+
+#[derive(Serialize, Deserialize,Debug,PartialEq)]
+pub struct Stop 	{ game: i32}
+
+impl MessageTrait for Stop {
+	fn to_json(&self) -> Result<String, MessageError> {
+		let r = serde_json::to_string(self);
+		match r {
+			Ok(r) => Ok(r),
+			Err(_) => Err(MessageError{}),
+		}
+	}
+}
+
+#[derive(Serialize, Deserialize,Debug,PartialEq)]
+pub struct EngineAction {game: i32, player: String, action: JsonAction}
+
+impl MessageTrait for EngineAction {
+	fn to_json(&self) -> Result<String, MessageError> {
+		let r = serde_json::to_string(self);
+		match r {
+			Ok(r) => Ok(r),
+			Err(_) => Err(MessageError{}),
+		}
+	}
+}
+
+#[derive(Serialize, Deserialize,Debug,PartialEq)]
+pub struct EngineState {game: i32, turn: i32, players: Vec<String>, state: JsonState}
+
+impl MessageTrait for EngineState {
+	fn to_json(&self) -> Result<String, MessageError> {
+		let r = serde_json::to_string(self);
+		match r {
+			Ok(r) => Ok(r),
+			Err(_) => Err(MessageError{}),
+		}
+	}
+}
+
 
 #[serde(tag = "type")]
 #[derive(Serialize, Deserialize,Debug,PartialEq)]
 pub enum Message {
-	Connected		{},
-	RegisterSuccess {id: i32},
-	Action			{ game: i32, key: String, action: Action},
-	Error			{ },
-	Register		{ clientType: String, game: String, name: String},
-	Start			{ game: i32, players: Vec<i32>, prefix: String, suffix: String},
-	State 			{ game: i32, key: String, turn: i32, r#move: bool, state: State},
-	Stop 			{ game: i32},
-	EngineAction	{game: i32, player: String, action: Action},
-	EngineState		{game: i32, turn: i32, players: Vec<String>, state: State},
+	Connected		(Connected),
+	RegisterSuccess (RegisterSuccess),
+	Action			(Action),
+	Error 			(Error),
+	Register 		(Register),
+	Start 			(Start),
+	State 			(State),
+	Stop 			(Stop),
+	EngineAction 	(EngineAction),
+	EngineState 	(EngineState),
 }
 
-type Action = Value;
-type State = Value;
+type JsonAction = Value;
+type JsonState = Value;
 
 #[cfg(test)]
 mod tests {
@@ -54,7 +190,7 @@ mod tests {
 	}
 
 	fn get_object_message_connected() -> Message {
-		Message::Connected{}
+		Message::Connected(Connected{})
 	}
 
 	fn get_string_message_connected() -> String {
@@ -70,19 +206,19 @@ mod tests {
 
 	#[test]
 	fn message_register_success_deserialize() {
-		let msg_json = get_string_message_action();
-		let msg_struct = get_object_message_action();
+		let msg_json = get_string_message_register_success();
+		let msg_struct = get_object_message_register_success();
 		deserialize_and_validate(msg_struct, &msg_json);
 	}
 
 	fn get_object_message_register_success() -> Message {
-		Message::RegisterSuccess{ id: 4884 }
+		Message::RegisterSuccess(RegisterSuccess{ id: 4884 })
 	}
 
 	fn get_string_message_register_success() -> String {
 		r#"{
 			"type": "RegisterSuccess",
-			"id": 4884,
+			"id": 4884
 		}"#.to_string()
 	}
 
@@ -101,11 +237,11 @@ mod tests {
 	}
 
 	fn get_object_message_action() -> Message {
-		Message::Action{
+		Message::Action(Action {
 			game: 4884,
 			key: "key".to_string(),
 			action: json!({"This can be": "anything"}),
-		}
+		})
 	}
 
 	fn get_string_message_action() -> String {
@@ -132,7 +268,7 @@ mod tests {
     }
 
 	fn get_object_message_error() -> Message {
-		Message::Error{}
+		Message::Error(Error{})
 	}
 
 	fn get_string_message_error() -> String {
@@ -156,11 +292,11 @@ mod tests {
 	}
 
 	fn get_object_message_register() -> Message {
-		Message::Register{
+		Message::Register(Register{
 			game: "game".to_string(),
 			name: "name".to_string(),
 			clientType: "clientType".to_string(),
-		}
+		})
 	}
 
 	fn get_string_message_register() -> String {
@@ -187,12 +323,12 @@ mod tests {
 	}
 
 	fn get_object_message_start() -> Message {
-		Message::Start{
+		Message::Start(Start{
 			game: 42,
 			players: vec![0,1],
 			prefix: "prefix".to_string(),
 			suffix: "suffix".to_string(),
-		}
+		})
 	}
 
 	fn get_string_message_start() -> String {
@@ -220,13 +356,13 @@ mod tests {
 	}
 
 	fn get_object_message_state() -> Message {
-		Message::State{
+		Message::State(State{
 			game: 42,
 			key: "key".to_string(),
 			turn: 0,
 			r#move: true,
 			state : json!({"This can be": "anything"})
-		}
+		})
 	}
 
 	fn get_string_message_state() -> String {
@@ -255,7 +391,7 @@ mod tests {
 	}
 
 	fn get_object_message_stop() -> Message {
-		Message::Stop{game: 42}
+		Message::Stop(Stop{game: 42})
 	}
 
 	fn get_string_message_stop() -> String {
@@ -280,11 +416,11 @@ mod tests {
 	}
 
 	fn get_object_message_action_engine() -> Message {
-		Message::EngineAction{
+		Message::EngineAction(EngineAction{
 			game: 4882,
 			player: "key".to_string(),
 			action: json!({"This can be": "anything"}),
-		}
+		})
 	}
 
 	fn get_string_message_action_engine() -> String {
@@ -311,12 +447,12 @@ mod tests {
 	}
 
 	fn get_object_message_state_engine() -> Message {
-		Message::EngineState{
+		Message::EngineState(EngineState{
 			game: 42,
 			turn: 0,
 			state : json!({"This can be": "anything"}),
 			players: vec!["p1".to_string(),"p2".to_string()],
-		}
+		})
 	}
 
 	fn get_string_message_state_engine() -> String {
