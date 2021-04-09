@@ -24,10 +24,10 @@ pub enum Message {
 	EngineState 	(EngineState),
 }
 
-type JsonAction = Value;
-type JsonState = Value;
+pub type JsonAction = Value;
+pub type JsonState = Value;
 
-pub fn deserialize_message(json: &String) -> Result<Message, MessageError> {
+pub fn deserialize_message(json: &str) -> Result<Message, MessageError> {
 	let r = serde_json::from_str(json);
 	match r {
 		Ok(r) => Ok(r),
@@ -51,25 +51,25 @@ pub struct Register {
 }
 
 #[derive(Serialize, Deserialize,Debug,PartialEq)]
-pub struct Action	{game: i32, key: String, action: JsonState}
+pub struct Action	{pub game: i32, pub key: String, pub action: JsonState}
 
 #[derive(Serialize, Deserialize,Debug,PartialEq)]
-pub struct Error 	{ message: String }
+pub struct Error 	{ pub message: String }
 
 #[derive(Serialize, Deserialize,Debug,PartialEq)]
-pub struct Start 	{ game: i32, players: Vec<i32>, prefix: String, suffix: String}
+pub struct Start 	{ pub game: i32, pub players: Vec<i32>, pub prefix: String, pub suffix: String}
 
 #[derive(Serialize, Deserialize,Debug,PartialEq)]
-pub struct State 	{ game: i32, key: String, turn: i32, r#move: bool, state: JsonState}
+pub struct State 	{ pub game: i32, pub key: String, pub turn: i32, pub r#move: bool, pub state: JsonState}
 
 #[derive(Serialize, Deserialize,Debug,PartialEq)]
-pub struct Stop 	{ game: i32}
+pub struct Stop 	{ pub game: i32}
 
 #[derive(Serialize, Deserialize,Debug,PartialEq)]
-pub struct EngineAction {game: i32, player: String, action: JsonAction}
+pub struct EngineAction {pub game: i32, pub player: String, pub action: JsonAction}
 
 #[derive(Serialize, Deserialize,Debug,PartialEq)]
-pub struct EngineState {game: i32, turn: i32, players: Vec<String>, state: JsonState}
+pub struct EngineState {pub game: i32, pub turn: i32, pub players: Vec<String>, pub state: JsonState}
 
 impl MessageTrait for RegisterSuccess {
 	fn to_json(&self) -> Result<String, MessageError> {
@@ -208,8 +208,8 @@ mod tests {
 		Message::Connected(Connected{})
 	}
 
-	fn get_string_message_connected() -> String {
-		r#"{"type": "Connected"}"#.to_string()
+	fn get_string_message_connected() -> &'static str {
+		r#"{"type": "Connected"}"#
 	}
 
 	// RegisterSuccess
@@ -230,11 +230,11 @@ mod tests {
 		Message::RegisterSuccess(RegisterSuccess{ id: 4884 })
 	}
 
-	fn get_string_message_register_success() -> String {
+	fn get_string_message_register_success() -> &'static str {
 		r#"{
 			"type": "RegisterSuccess",
 			"id": 4884
-		}"#.to_string()
+		}"#
 	}
 
 	// Action
@@ -259,13 +259,13 @@ mod tests {
 		})
 	}
 
-	fn get_string_message_action() -> String {
+	fn get_string_message_action() -> &'static str {
 		r#"{
 			"type": "Action",
 			"game": 4884,
 			"key": "key",
 			"action": {"This can be": "anything"}
-		}"#.to_string()
+		}"#
 	}
 
 	// Error
@@ -286,11 +286,11 @@ mod tests {
 		Message::Error(Error{ message: "You messed up".to_string() })
 	}
 
-	fn get_string_message_error() -> String {
+	fn get_string_message_error() -> &'static str {
 		r#"{
 			"type": "Error",
 			"message": "You messed up"
-		}"#.to_string()
+		}"#
 	}
 
 	// Register
@@ -315,13 +315,13 @@ mod tests {
 		})
 	}
 
-	fn get_string_message_register() -> String {
+	fn get_string_message_register() -> &'static str {
 		r#"{
 			"type": "Register",
 			"game": "game",
 			"name": "name",
 			"clientType": "clientType"
-		}"#.to_string()
+		}"#
 	}
 
 	// Start
@@ -347,14 +347,14 @@ mod tests {
 		})
 	}
 
-	fn get_string_message_start() -> String {
+	fn get_string_message_start() -> &'static str {
 		r#"{
 			"type": "Start",
 			"game": 42,
 			"players": [0,1],
 			"prefix": "prefix",
 			"suffix": "suffix"
-		}"#.to_string()
+		}"#
 	}
 
 	// State
@@ -381,7 +381,7 @@ mod tests {
 		})
 	}
 
-	fn get_string_message_state() -> String {
+	fn get_string_message_state() -> &'static str {
 		r#"{
 			"type": "State",
 			"game": 42,
@@ -389,7 +389,7 @@ mod tests {
 			"turn": 0,
 			"move": true,
 			"state": {"This can be": "anything"}
-		}"#.to_string()
+		}"#
 	}
 
 	// Stop
@@ -410,11 +410,11 @@ mod tests {
 		Message::Stop(Stop{game: 42})
 	}
 
-	fn get_string_message_stop() -> String {
+	fn get_string_message_stop() -> &'static str {
 		r#"{
 			"type": "Stop",
 			"game": 42
-		}"#.to_string()
+		}"#
 	}
 
 	// ActionEngine
@@ -439,13 +439,13 @@ mod tests {
 		})
 	}
 
-	fn get_string_message_action_engine() -> String {
+	fn get_string_message_action_engine() -> &'static str {
 		r#"{
 			"type": "EngineAction",
 			"game": 4882,
 			"player": "key",
 			"action": {"This can be": "anything"}
-		}"#.to_string()
+		}"#
 	}
 
 	// StateEngine
@@ -471,13 +471,13 @@ mod tests {
 		})
 	}
 
-	fn get_string_message_state_engine() -> String {
+	fn get_string_message_state_engine() -> &'static str {
 		r#"{
 			"type": "EngineState",
 			"game": 42,
 			"turn": 0,
 			"state": {"This can be": "anything"},
 			"players": ["p1", "p2"]
-		}"#.to_string()
+		}"#
 	}
 }
