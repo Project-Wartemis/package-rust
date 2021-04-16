@@ -43,7 +43,8 @@ impl Client {
     }
 
     fn handle_message(&self, message: msg::Message) -> bool {
-        self.handler.handle(message)
+        self.handler.handle(message);
+        false // This should be changed. There is also no test for this
     }
 }
 
@@ -53,8 +54,16 @@ mod client {
     use std::thread;
 
     fn new_test_client() -> Client {
-        let handler = handler::ServerMessageHandler::new();
+        let handler = handler::ServerMessageHandler::new(default_client_config());
         Client::new(Box::new(handler))
+    }
+
+    fn default_client_config() -> handler::ClientConfig {
+        handler::ClientConfig{
+            clientType: "bot".to_string(),
+            game: "test_game".to_string(),
+            name: "test_bot".to_string(),
+        }
     }
 
 	#[test]

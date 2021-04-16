@@ -1,6 +1,8 @@
 mod message;
 mod client;
+mod handler;
 
 fn main() {
-    let _ = client::new_client();
+    // let client_config = client::ClientConfig
+    // let _ = client::Client::new(client_config);
 }
