@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use crate::message as msg;
 
-#[derive(Hash,PartialEq,Eq,Debug)]
+#[derive(Hash,PartialEq,Eq,Debug,Clone)]
 pub enum Outputs {
     Server,
     Bot,
