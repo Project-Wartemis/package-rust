@@ -1,6 +1,5 @@
 use std::fmt;
 use std::collections::HashMap;
-// use crossbeam_channel;
 
 use crate::message as msg;
 
@@ -45,38 +44,38 @@ impl HandleError {
         }
     }
 
-    fn send() -> HandleError {
+    fn send(msg: String) -> HandleError {
         HandleError{
-            msg: "failed to send message".to_string()
+            msg: format!("send message: {}", msg).to_string()
         }
     }
 }
 
 pub trait Handler {
-    fn handle(&self, m: msg::Message) -> Result<Response, HandleError>;
+    fn handle(&self, json: String, msg_type: msg::Message) -> Result<Response,HandleError>;
     fn add_output_channel(&mut self,
         output_type: Outputs,
         channel: crossbeam_channel::Sender<String>);
 }
 
-pub struct ServerMessageHandler {
+pub struct MessageHandler {
     client_config: ClientConfig,
     outputs: HashMap<Outputs, crossbeam_channel::Sender<String>>,
 }
 
 
-impl Handler for ServerMessageHandler {
-    fn handle(&self, m: msg::Message) -> Result<Response,HandleError> {
-        match m {
+impl Handler for MessageHandler {
+    fn handle(&self, json: String, msg_type: msg::Message) -> Result<Response,HandleError> {
+        match msg_type {
             // don't pass to client
-            msg::Message::Connected(c) => self.handle_connected(c),
+            msg::Message::Connected(_) => self.handle_connected(),
             msg::Message::RegisterSuccess(rs) => self.handle_register_success(rs),
             // pass to client
-            msg::Message::Error(e) => self.handle_error(e),
-            msg::Message::State(s) => self.handle_state(s),
+            msg::Message::Error(_) => self.handle_error(json),
+            msg::Message::State(_) => self.handle_state(json),
             // pass to server
-            msg::Message::Action(s) => self.handle_action(s),
-            _ => Err(HandleError::unknown(m)),
+            msg::Message::Action(_) => self.handle_action(json),
+            _ => Err(HandleError::unknown(msg_type)),
         }
     }
 
@@ -85,15 +84,15 @@ impl Handler for ServerMessageHandler {
     }
 }
 
-impl ServerMessageHandler {
+impl MessageHandler {
     pub fn new(client_config: ClientConfig) -> Self {
-        ServerMessageHandler{
+        MessageHandler{
             client_config: client_config,
             outputs: HashMap::new(),
         }
     }
 
-    fn handle_connected(&self, _: msg::Connected) -> Result<Response, HandleError> {
+    fn handle_connected(&self) -> Result<Response, HandleError> {
         let register_msg = msg::Message::Register(msg::Register {
             clientType: self.client_config.clientType.clone(),
             game: self.client_config.game.clone(),
@@ -110,22 +109,16 @@ impl ServerMessageHandler {
         Ok(Response::SetID(m.id))
     }
 
-    fn handle_error(&self, m: msg::Error) -> Result<Response, HandleError> {
-        let msg_string = msg::serialize_message(msg::Message::Error(m))
-            .or_else(|_| Err(HandleError::serialize("error")))?;
-        self.send(msg_string, &Outputs::Bot)
+    fn handle_error(&self, m: String) -> Result<Response, HandleError> {
+        self.send(m, &Outputs::Bot)
     }
 
-    fn handle_state(&self, m: msg::State) -> Result<Response, HandleError> {
-        let msg_string = msg::serialize_message(msg::Message::State(m))
-            .or_else(|_| Err(HandleError::serialize("error")))?;
-        self.send(msg_string, &Outputs::Bot)
+    fn handle_state(&self, m: String) -> Result<Response, HandleError> {
+        self.send(m, &Outputs::Bot)
     }
 
-    fn handle_action(&self, m: msg::Action) -> Result<Response, HandleError> {
-        let msg_string = msg::serialize_message(msg::Message::Action(m))
-            .or_else(|_| Err(HandleError::serialize("error")))?;
-        self.send(msg_string, &Outputs::Server)
+    fn handle_action(&self, m: String) -> Result<Response, HandleError> {
+        self.send(m, &Outputs::Server)
     }
 
     fn send(&self, m: String, output: &Outputs) -> Result<Response, HandleError> {
@@ -133,7 +126,7 @@ impl ServerMessageHandler {
             .ok_or(HandleError::undefined_output(output))?;
 
         chan.send(m)
-            .map_err(|_| HandleError::send())
+            .map_err(|e| HandleError::send(format!("{}",e)))
             .map(|_| Response::Empty)
     }
 }
@@ -145,9 +138,9 @@ pub struct ClientConfig{
 }
 
 #[cfg(test)]
-mod server_message_handler {
+mod tests {
     use super::*;
-    use std::thread;
+    use std::matches;
 
     fn default_client_config() -> ClientConfig {
         ClientConfig{
@@ -157,114 +150,177 @@ mod server_message_handler {
         }
     }
 
-    fn handle_message_as_proxy(input_message: msg::Message, response_message: msg::Message, target_output_channel: Outputs) {
-        let mut handler = ServerMessageHandler::new(default_client_config());
+    struct HandleResult{
+        channel_response: String,
+        response: Response,
+    }
 
-        let (sender,receiver) = crossbeam_channel::bounded(0);
+    impl HandleResult {
+        fn assert_channel_response_equals(&self, s: String) {
+            assert_eq!(self.channel_response, s)
+        }
+
+        fn assert_response_is_Empty(&self) {
+            assert!(matches!(self.response, Response::Empty))
+        }
+    }
+
+    fn handle_message_and_get_results(
+            msg_json: String,
+            target_output_channel: Outputs) -> HandleResult {
+
+        let mut handler = MessageHandler::new(default_client_config());
+
+        let (sender,receiver) = crossbeam_channel::bounded(1);
         handler.add_output_channel(target_output_channel, sender);
 
-        let listen_thread = thread::spawn(move || receiver.recv());
+        let msg_obj = msg::deserialize_message(&msg_json).unwrap();
+        let response = handler.handle(msg_json, msg_obj).unwrap();
 
-        let work_result = handler.handle(input_message).unwrap();
-        let return_value_ok = match  work_result{
-            Response::Empty => true,
-            _ => false,
-        };
-        assert_eq!(return_value_ok, true);
+        let channel_response = receiver.recv().unwrap();
 
-        let resp_to_bot = listen_thread.join().unwrap().unwrap();
-
-        assert_eq!(
-            msg::deserialize_message(&resp_to_bot[..]).unwrap(),
-            response_message)
+        HandleResult{
+            channel_response: channel_response,
+            response: response
+        }
     }
 
-    #[test]
-    fn handle_message_connected_as_proxy() {
-        let input_message = msg::Message::Connected(msg::Connected{});
-        let response_message = msg::Message::Register(msg::Register{
-            clientType: default_client_config().clientType,
-            game: default_client_config().game,
-            name: default_client_config().name,
-        });
-        let target_output_channel = Outputs::Server;
-
-        handle_message_as_proxy(input_message, response_message, target_output_channel);
+    fn handle_message_as_proxy_and_expect_empty_response(input_msg_string: String, target_output_channel: Outputs) {
+        let result = handle_message_and_get_results(input_msg_string.clone(), target_output_channel);
+        result.assert_channel_response_equals(input_msg_string);
+        result.assert_response_is_Empty();
     }
 
-    #[test]
-    fn handle_message_register_success() {
-        let msg_reg_suc = msg::Message::RegisterSuccess(
-            msg::RegisterSuccess{
-                id: 1
-            }
-        );
 
-        let mut handler = ServerMessageHandler::new(default_client_config());
-        let response = handler.handle(msg_reg_suc).unwrap();
+    #[cfg(test)]
+    mod nonproxy {
+        use super::*;
 
-        let ok = match response {
-            Response::SetID(1) => true,
-            _ => false,
-        };
-        assert_eq!(ok, true);
-    }
-
-    #[test]
-    fn handle_message_error_as_proxy() {
-        let generate_error_msg = || {
-            msg::Message::Error(
-                msg::Error{
-                    message: "example error".to_string(),
+        #[test]
+        fn handle_msg_register_success_receive_SetID_response() {
+            let msg_reg_suc = msg::Message::RegisterSuccess(
+                msg::RegisterSuccess{
+                    id: 1
                 }
-            )
-        };
+            );
 
-        let input_message = generate_error_msg();
-        let response_message = generate_error_msg();
-        let target_output_channel = Outputs::Bot;
+            let mut handler = MessageHandler::new(default_client_config());
+            let response = handler.handle("".to_string(), msg_reg_suc).unwrap();
 
-        handle_message_as_proxy(input_message, response_message, target_output_channel);
+            let ok = match response {
+                Response::SetID(1) => true,
+                _ => false,
+            };
+            assert_eq!(ok, true);
+        }
+
+        #[test]
+        fn handle_msg_connected_get_empty_response_and_send_register() {
+            let message_json = r#"{"type": "Connected"}"#.to_string();
+            let response_message = msg::Message::Register(msg::Register{
+                clientType: default_client_config().clientType,
+                game: default_client_config().game,
+                name: default_client_config().name,
+            });
+            let expected_channel_response = msg::serialize_message(response_message).unwrap();
+
+            let target_output_channel = Outputs::Server;
+
+            let result = handle_message_and_get_results(message_json, target_output_channel);
+            result.assert_channel_response_equals(expected_channel_response);
+            result.assert_response_is_Empty();
+        }
     }
 
+    #[cfg(test)]
+    mod proxy {
+        use super::*;
 
-    #[test]
-    fn handle_message_state_as_proxy() {
-        let generate_state_msg = || {
-            msg::Message::State(
-                msg::State{
-                    game: 1,
-                    key: "key".to_string(),
-                    turn: 1,
-                    r#move: true,
-                    state: msg::JsonState::Null,
-                }
-            )
-        };
+        #[test]
+        fn handle_error_as_proxy() {
+            let message_json = r#"{"type": "Error"}"#;
+            let target_output_channel = Outputs::Bot;
 
-        let input_message = generate_state_msg();
-        let response_message = generate_state_msg();
-        let target_output_channel = Outputs::Bot;
+            handle_message_as_proxy_and_expect_empty_response(
+                message_json.to_string(),
+                target_output_channel);
+        }
 
-        handle_message_as_proxy(input_message, response_message, target_output_channel);
+        #[test]
+        fn handle_state_as_proxy() {
+            let message_json = r#"{"type": "State"}"#;
+            let target_output_channel = Outputs::Bot;
+
+            handle_message_as_proxy_and_expect_empty_response(
+                message_json.to_string(),
+                target_output_channel);
+        }
+
+        #[test]
+        fn handle_action_as_proxy() {
+            let message_json = r#"{"type": "Action"}"#;
+            let target_output_channel = Outputs::Server;
+
+            handle_message_as_proxy_and_expect_empty_response(
+                message_json.to_string(),
+                target_output_channel);
+        }
+
     }
 
-    #[test]
-    fn handle_message_action_as_proxy() {
-        let generate_action_msg = || {
-            msg::Message::Action(
-                msg::Action{
-                    game: 1,
-                    key: "key".to_string(),
-                    action: msg::JsonState::Null,
-                }
-            )
-        };
+    #[cfg(test)]
+    mod errors {
+        use super::*;
 
-        let input_message = generate_action_msg();
-        let response_message = generate_action_msg();
-        let target_output_channel = Outputs::Server;
+        #[test]
+        fn trigger_unknown_error_by_handling_register_message() {
+            let register_msg = msg::Register {
+                clientType: "x".to_string(),
+                game: "y".to_string(),
+                name: "z".to_string(),
+            };
+            let msg_json = msg::serialize_message(msg::Message::Register(register_msg.clone())).unwrap();
 
-        handle_message_as_proxy(input_message, response_message, target_output_channel);
+            let handler = MessageHandler::new(default_client_config());
+
+            let response = handler.handle(msg_json, msg::Message::Register(register_msg.clone()));
+
+            let returned_err = response.err().unwrap();
+            let expected_err = HandleError::unknown(msg::Message::Register(register_msg));
+
+            assert_eq!(returned_err.msg, expected_err.msg)
+        }
+
+        #[test]
+        fn trigger_undefined_output_error_by_not_adding_output_channel() {
+            let msg_json = msg::serialize_message(msg::Message::Connected(msg::Connected{})).unwrap();
+
+            let handler = MessageHandler::new(default_client_config());
+
+            let response = handler.handle(msg_json, msg::Message::Connected(msg::Connected{}));
+
+            let returned_err = response.err().unwrap();
+            let expected_err = HandleError::undefined_output(&Outputs::Server);
+
+            assert_eq!(returned_err.msg, expected_err.msg)
+        }
+
+        #[test]
+        fn trigger_send_error_by_closing_receiver_channel() {
+            let msg_json = msg::serialize_message(msg::Message::Connected(msg::Connected{})).unwrap();
+
+            let mut handler = MessageHandler::new(default_client_config());
+
+            // Drop receiver to close sender channel
+            let (sender,_) = crossbeam_channel::bounded(0);
+            handler.add_output_channel(Outputs::Server, sender);
+
+            let response = handler.handle(msg_json, msg::Message::Connected(msg::Connected{}));
+
+            let returned_err = response.err().unwrap();
+            let expected_err = HandleError::send("sending on a disconnected channel".to_string());
+
+            assert_eq!(returned_err.msg, expected_err.msg)
+        }
     }
 }

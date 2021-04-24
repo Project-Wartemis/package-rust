@@ -1,50 +1,44 @@
 use crate::handler;
 use crate::message as msg;
+use crossbeam_channel::{select,unbounded};
+use futures::executor::block_on;
 
-// type RawMessage = str;
-// type MessageHandler = fn(&RawMessage);
+use std::thread;
 
-// pub trait Connection {
-//     fn read(&self) -> &str;
-//     fn write(&self, msg: &str);
-// }
 
-// #[derive(Clone)]
-pub struct ClientConfig {
-    pub client_type: String,
-    pub game: String,
-    pub name: String,
-}
 
 pub struct Client {
-    handler: Box<handler::Handler>,
+    handler: Box<dyn handler::Handler>,
+    inc_server_chan: crossbeam_channel::Receiver<String>,
+    inc_bot_chan: crossbeam_channel::Receiver<String>,
 }
 
 impl Client {
-    fn new(handler: Box<handler::Handler>) -> Self {
+    fn new(
+        handler: Box<dyn handler::Handler>,
+        inc_server_chan: crossbeam_channel::Receiver<String>,
+        inc_bot_chan: crossbeam_channel::Receiver<String>) -> Self {
         Client{
-            handler: handler
+            handler: handler,
+            inc_server_chan: inc_server_chan,
+            inc_bot_chan: inc_bot_chan,
         }
     }
 
-    // fn pipe(&self, raw_message: &str) -> Option<bool>{
-    //     let message = self.parse_raw_message(raw_message)?;
-    //     let response = self.handle_message(message);
-    //     Some(response)
-    // }
-
-    fn parse_raw_message(&self, raw_message: &str) -> Option<msg::Message> {
-        let message_result = msg::deserialize_message(raw_message);
-        if let Err(_) = message_result {
-            return None;
-        };
-        let message = message_result.unwrap();
-        Some(message)
+    fn start(&self) -> Result<(),crossbeam_channel::RecvError>{
+        loop {
+            select!{
+                recv(self.inc_server_chan) -> msg => self.handle(msg)?,
+                recv(self.inc_bot_chan) -> msg => self.handle(msg)?,
+            };
+        }
     }
 
-    fn handle_message(&self, message: msg::Message) -> bool {
-        self.handler.handle(message);
-        false // This should be changed. There is also no test for this
+    fn handle(&self, channel_output: Result<String, crossbeam_channel::RecvError>) -> Result<(), crossbeam_channel::RecvError> {
+        let message_string = channel_output?;
+        let message = msg::deserialize_message(&message_string).unwrap();
+        let response = self.handler.handle(message_string,message);
+        Ok(())
     }
 }
 
@@ -52,11 +46,7 @@ impl Client {
 mod client {
     use super::*;
     use std::thread;
-
-    fn new_test_client() -> Client {
-        let handler = handler::ServerMessageHandler::new(default_client_config());
-        Client::new(Box::new(handler))
-    }
+    use crate::handler::*;
 
     fn default_client_config() -> handler::ClientConfig {
         handler::ClientConfig{
@@ -67,25 +57,122 @@ mod client {
     }
 
 	#[test]
-    fn parsing_correct_connected_message_returns_Some() {
-        let client = new_test_client();
+    fn received_connected_message_should_respond_with_register_message() {
+        let (server_inc_snd,     server_inc_rec) = crossbeam_channel::bounded(1);
+        let (bot_inc_snd_unused, bot_inc_rec) = crossbeam_channel::bounded(1);
 
-        let incoming_message = r#"{"type": "Connected"}"#;
-        let result = client.parse_raw_message(incoming_message);
+        let (server_out_snd,     server_out_rec) = crossbeam_channel::bounded(1);
 
-        let ok = match result {
-            Some(msg::Message::Connected(_)) => true,
-            _ => false,
-        };
-        assert_eq!(ok, true);
+        // Create and start client
+        thread::spawn(move || {
+            let mut handler = handler::MessageHandler::new(default_client_config());
+            handler.add_output_channel(handler::Outputs::Server, server_out_snd);
+
+            let c = Client::new(Box::new(handler), server_inc_rec, bot_inc_rec);
+
+            let r = c.start();
+            if let Err(e) = r {
+                assert_eq!(format!("{}", e), "");
+            }
+        });
+
+        // client receives Connected message from Server
+        let input_msg = r#"{"type": "Connected"}"#.to_string();
+        server_inc_snd.send(input_msg);
+
+        // get reply
+        let response = server_out_rec.recv().unwrap();
+        let expected_response = r#"{"type":"Register","clientType":"bot","game":"test_game","name":"test_bot"}"#.to_string();
+        assert_eq!(response, expected_response)
     }
 
     #[test]
-    fn parsing_incorrect_message_returns_None() {
-        let client = new_test_client();
+    fn receive_state_message_and_pass_on_to_bot() {
+        let (server_inc_snd,    server_inc_rec) = crossbeam_channel::bounded(1);
+        let (bot_inc_snd_unused,                 bot_inc_rec) = crossbeam_channel::bounded(1);
 
-        let incoming_message = r#"{"This is": "nonsense"}"#;
-        let result = client.parse_raw_message(incoming_message);
-        assert_eq!(result.is_none(), true);
+        let (bot_out_snd, bot_out_rec) = crossbeam_channel::bounded(1);
+
+        // Create and start client
+        thread::spawn(move || {
+            let mut handler = handler::MessageHandler::new(default_client_config());
+            handler.add_output_channel(handler::Outputs::Bot, bot_out_snd);
+
+            let c = Client::new(Box::new(handler), server_inc_rec, bot_inc_rec);
+
+            let r = c.start();
+            if let Err(e) = r {
+                assert_eq!(format!("{}", e), "");
+            }
+        });
+
+        // client receives Connected message from Server
+        let input_msg = r#"{"type": "State", "other": "fields"}"#;
+        server_inc_snd.send(input_msg.to_string());
+
+        // get reply
+        let response = bot_out_rec.recv().unwrap();
+        let expected_response = input_msg.to_string();
+        assert_eq!(response, expected_response)
+    }
+
+    #[test]
+    fn receive_error_message_and_pass_on_to_bot() {
+        let (server_inc_snd,    server_inc_rec) = crossbeam_channel::bounded(1);
+        let (bot_inc_snd_unused,                 bot_inc_rec) = crossbeam_channel::bounded(1);
+
+        let (bot_out_snd, bot_out_rec) = crossbeam_channel::bounded(1);
+
+        // Create and start client
+        thread::spawn(move || {
+            let mut handler = handler::MessageHandler::new(default_client_config());
+            handler.add_output_channel(handler::Outputs::Bot, bot_out_snd);
+
+            let c = Client::new(Box::new(handler), server_inc_rec, bot_inc_rec);
+
+            let r = c.start();
+            if let Err(e) = r {
+                assert_eq!(format!("{}", e), "");
+            }
+        });
+
+        // client receives Connected message from Server
+        let input_msg = r#"{"type": "Error", "message": "string"}"#;
+        server_inc_snd.send(input_msg.to_string());
+
+        // get reply
+        let response = bot_out_rec.recv().unwrap();
+        let expected_response = input_msg.to_string();
+        assert_eq!(response, expected_response)
+    }
+
+    #[test]
+    fn receive_action_message_and_pass_on_to_server() {
+        let (server_inc_snd_unused,    server_inc_rec) = crossbeam_channel::bounded(1);
+        let (bot_inc_snd,                 bot_inc_rec) = crossbeam_channel::bounded(1);
+
+        let (server_out_snd, server_out_rec) = crossbeam_channel::bounded(1);
+
+        // Create and start client
+        thread::spawn(move || {
+            let mut handler = handler::MessageHandler::new(default_client_config());
+            handler.add_output_channel(handler::Outputs::Server, server_out_snd);
+
+            let c = Client::new(Box::new(handler), server_inc_rec, bot_inc_rec);
+
+            let r = c.start();
+            if let Err(e) = r {
+                assert_eq!(format!("{}", e), "");
+            }
+        });
+
+        // client receives Connected message from Server
+        let input_msg = r#"{"type": "Action", "message": "string"}"#;
+        bot_inc_snd.send(input_msg.to_string());
+
+        // get reply
+        let response = server_out_rec.recv().unwrap();
+        let expected_response = input_msg.to_string();
+        assert_eq!(response, expected_response)
     }
 }
