@@ -73,16 +73,18 @@ impl MessageHandler {
         }
     }
 
-    fn handle_connected(&self) -> Result<Response, HandleError> {
+    fn build_register_message(&self) -> Result<String, msg::MessageError> {
         let register_msg = msg::Message::Register(msg::Register {
             clientType: self.client_config.clientType.clone(),
             game: self.client_config.game.clone(),
             name: self.client_config.name.clone(),
         });
+        msg::serialize_message(register_msg)
+    }
 
-        let msg_string = msg::serialize_message(register_msg)?;
-
-        self.send(msg_string, &Outputs::Server)
+    fn handle_connected(&self) -> Result<Response, HandleError> {
+        let register_msg = self.build_register_message()?;
+        self.send(register_msg, &Outputs::Server)
     }
 
     fn handle_register_success(&self, m: msg::RegisterSuccess) -> Result<Response, HandleError> {

@@ -82,16 +82,16 @@ mod tests {
 			let err = deserialize_message("invalid_json");
 			match err {
 				Err(MessageError::Deserialize{..}) => (),
-				_ => panic!("Expected an error when deserializing a json"),
+				_ => panic!("Expected an error when deserializing a json but got {:?}", err),
 			}
 		}
 
 		#[test]
 		fn deserialising_unknown_message_should_return_an_error() {
-			let simulated_error = deserialize_message(r#"{"type": "Foo"}"#);
-			match simulated_error {
+			let err = deserialize_message(r#"{"type": "Foo"}"#);
+			match err {
 				Err(MessageError::Deserialize{..}) => {},
-				_ => panic!("Expected an error when deserializing a json"),
+				_ => panic!("Expected an error when deserializing a json but got {:?}", err),
 			}
 		}
 	}
