@@ -1,5 +1,5 @@
-use std::fmt;
 use std::collections::HashMap;
+use thiserror::Error;
 
 use crate::message as msg;
 
@@ -14,41 +14,22 @@ pub enum Response {
     Empty
 }
 
-#[derive(Debug)]
-pub struct HandleError{
-    msg: String,
-}
+#[derive(Error,Debug)]
+pub enum HandleError {
+    #[error("unkown message type: `{0:?}`")]
+    UnknownMessageType(msg::Message),
 
-impl fmt::Display for HandleError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.msg)
-    }
-}
+    #[error("no output defined for outputType `{0:?}`")]
+    UndefinedOutput(Outputs),
 
-impl HandleError {
-    fn unknown(message: msg::Message) -> HandleError {
-        HandleError{
-            msg: format!("unknown message type: {:?}", message).to_string()
-        }
-    }
+    #[error(transparent)]
+    MessageError(#[from] msg::MessageError),
 
-    fn undefined_output(output: &Outputs) -> HandleError {
-        HandleError{
-            msg: format!("no output defined for {:?}", output).to_string()
-        }
-    }
-
-    fn serialize(msg_type: &str) -> HandleError {
-        HandleError{
-            msg: format!("unmarshal {} message", msg_type).to_string()
-        }
-    }
-
-    fn send(msg: String) -> HandleError {
-        HandleError{
-            msg: format!("send message: {}", msg).to_string()
-        }
-    }
+    #[error("send message to {output:?}: {source:?}")]
+    SendError{
+        source: crossbeam_channel::SendError<String>,
+        output: Outputs,
+        },
 }
 
 pub trait Handler {
@@ -75,7 +56,7 @@ impl Handler for MessageHandler {
             msg::Message::State(_) => self.handle_state(json),
             // pass to server
             msg::Message::Action(_) => self.handle_action(json),
-            _ => Err(HandleError::unknown(msg_type)),
+            _ => Err(HandleError::UnknownMessageType(msg_type)),
         }
     }
 
@@ -99,8 +80,7 @@ impl MessageHandler {
             name: self.client_config.name.clone(),
         });
 
-        let msg_string = msg::serialize_message(register_msg)
-            .or_else(|_| Err(HandleError::serialize("register")))?;
+        let msg_string = msg::serialize_message(register_msg)?;
 
         self.send(msg_string, &Outputs::Server)
     }
@@ -123,10 +103,13 @@ impl MessageHandler {
 
     fn send(&self, m: String, output: &Outputs) -> Result<Response, HandleError> {
         let chan = self.outputs.get(output)
-            .ok_or(HandleError::undefined_output(output))?;
+            .ok_or(HandleError::UndefinedOutput(output.clone()))?;
 
         chan.send(m)
-            .map_err(|e| HandleError::send(format!("{}",e)))
+            .map_err(|e| HandleError::SendError{
+                source: e,
+                output: output.clone(),
+            })
             .map(|_| Response::Empty)
     }
 }
@@ -286,9 +269,10 @@ mod tests {
             let response = handler.handle(msg_json, msg::Message::Register(register_msg.clone()));
 
             let returned_err = response.err().unwrap();
-            let expected_err = HandleError::unknown(msg::Message::Register(register_msg));
-
-            assert_eq!(returned_err.msg, expected_err.msg)
+            match returned_err {
+                HandleError::UnknownMessageType(msg::Message::Register(register_msg)) => (),
+                _ => panic!("Expected an UnknownMessageType error but got {:?}", returned_err),
+            }
         }
 
         #[test]
@@ -300,9 +284,10 @@ mod tests {
             let response = handler.handle(msg_json, msg::Message::Connected(msg::Connected{}));
 
             let returned_err = response.err().unwrap();
-            let expected_err = HandleError::undefined_output(&Outputs::Server);
-
-            assert_eq!(returned_err.msg, expected_err.msg)
+            match returned_err {
+                HandleError::UndefinedOutput(Outputs::Server) => (),
+                _ => panic!("Expected an UndefinedOutput error but got {:?}", returned_err),
+            }
         }
 
         #[test]
@@ -318,9 +303,10 @@ mod tests {
             let response = handler.handle(msg_json, msg::Message::Connected(msg::Connected{}));
 
             let returned_err = response.err().unwrap();
-            let expected_err = HandleError::send("sending on a disconnected channel".to_string());
-
-            assert_eq!(returned_err.msg, expected_err.msg)
+            match returned_err {
+                HandleError::SendError{ source: _, output: Outputs::Server} => (),
+                _ => panic!("Expected a send error but got {:?}", returned_err),
+            }
         }
     }
 }

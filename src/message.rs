@@ -1,14 +1,16 @@
 use std::fmt;
 use serde_json::Value;
+use serde_json;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
-#[derive(Debug)]
-pub struct MessageError {}
+#[derive(Error,Debug)]
+pub enum MessageError {
+	#[error("deserialise message: {source}")]
+    Deserialize{source: serde_json::Error},
 
-impl fmt::Display for MessageError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Some error")
-    }
+	#[error("serialise message: {source}")]
+    Serialize{ source: serde_json::Error},
 }
 
 #[serde(tag = "type")]
@@ -29,27 +31,22 @@ pub struct MessageContent {
 }
 
 pub fn deserialize_message(json: &str) -> Result<Message, MessageError> {
-	let r = serde_json::from_str(json);
-	match r {
-		Ok(r) => Ok(r),
-		Err(_) => Err(MessageError{}),
-	}
+	serde_json::from_str(json)
+		.map_err(|e| MessageError::Deserialize{source: e})
 }
 
 pub fn serialize_message(message: Message) -> Result<String, MessageError> {
-	match serde_json::to_string(&message) {
-            Ok(r) => Ok(r),
-            Err(_) => Err(MessageError{}),
-        }
+	serde_json::to_string(&message)
+		.map_err(|e| MessageError::Serialize{source: e})
 }
+
+#[derive(Serialize, Deserialize,Debug,PartialEq)]
+pub struct Connected {}
 
 #[derive(Serialize, Deserialize,Debug,PartialEq)]
 pub struct RegisterSuccess {
 	pub id: i32
 }
-
-#[derive(Serialize, Deserialize,Debug,PartialEq)]
-pub struct Connected {}
 
 #[derive(Serialize, Deserialize,Debug,PartialEq,Clone)]
 pub struct Register {
@@ -77,10 +74,32 @@ mod tests {
 	}
 
 	#[cfg(test)]
+	mod general {
+		use super::*;
+
+		#[test]
+		fn deserialising_invalid_json_should_return_an_error() {
+			let err = deserialize_message("invalid_json");
+			match err {
+				Err(MessageError::Deserialize{..}) => (),
+				_ => panic!("Expected an error when deserializing a json"),
+			}
+		}
+
+		#[test]
+		fn deserialising_unknown_message_should_return_an_error() {
+			let simulated_error = deserialize_message(r#"{"type": "Foo"}"#);
+			match simulated_error {
+				Err(MessageError::Deserialize{..}) => {},
+				_ => panic!("Expected an error when deserializing a json"),
+			}
+		}
+	}
+
+	#[cfg(test)]
 	mod connected {
 		use super::*;
 
-		// Connected
 		#[test]
 		fn message_connected_reserialize() {
 			let msg_struct = get_object_message_connected();

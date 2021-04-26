@@ -1,16 +1,14 @@
 use crate::handler;
 use crate::message as msg;
 use crossbeam_channel::{select,unbounded};
-use futures::executor::block_on;
 
-use std::thread;
-
-
+use std::sync::Mutex;
 
 pub struct Client {
     handler: Box<dyn handler::Handler>,
     inc_server_chan: crossbeam_channel::Receiver<String>,
     inc_bot_chan: crossbeam_channel::Receiver<String>,
+    started: Mutex<bool>,
 }
 
 impl Client {
@@ -22,10 +20,20 @@ impl Client {
             handler: handler,
             inc_server_chan: inc_server_chan,
             inc_bot_chan: inc_bot_chan,
+            started: Mutex::new(false),
         }
     }
 
     fn start(&self) -> Result<(),crossbeam_channel::RecvError>{
+        // Make sure the start function is only executed once.
+        {
+            let mut started = self.started.lock().unwrap();
+            if *started {
+                return Ok(());
+            }
+            *started = true;
+        }
+
         loop {
             select!{
                 recv(self.inc_server_chan) -> msg => self.handle(msg)?,
@@ -58,41 +66,41 @@ mod client {
 
 	#[test]
     fn received_connected_message_should_respond_with_register_message() {
-        let output_type = handler::Outputs::Server;
-        let msg_to_send = r#"{"type": "Connected"}"#;
+        let output_destination = handler::Outputs::Server;
+        let incomming_message = r#"{"type": "Connected"}"#;
         let expected_reply = r#"{"type":"Register","clientType":"bot","game":"test_game","name":"test_bot"}"#;
 
-        doit(output_type, msg_to_send, expected_reply);
+        create_client_and_handle_message(incomming_message, output_destination, expected_reply)
     }
 
     #[test]
     fn receive_state_message_and_pass_on_to_bot() {
-        let output_type = handler::Outputs::Bot;
-        let msg_to_send = r#"{"type": "State", "other": "fields"}"#;
+        let output_destination = handler::Outputs::Bot;
+        let incomming_message = r#"{"type": "State", "other": "fields"}"#;
         let expected_reply = r#"{"type": "State", "other": "fields"}"#;
 
-        doit(output_type, msg_to_send, expected_reply);
+        create_client_and_handle_message(incomming_message, output_destination, expected_reply)
     }
 
     #[test]
     fn receive_error_message_and_pass_on_to_bot() {
-        let output_type = handler::Outputs::Bot;
-        let msg_to_send = r#"{"type": "Error", "message": "string"}"#;
+        let output_destination = handler::Outputs::Bot;
+        let incomming_message = r#"{"type": "Error", "message": "string"}"#;
         let expected_reply = r#"{"type": "Error", "message": "string"}"#;
 
-        doit(output_type, msg_to_send, expected_reply);
+        create_client_and_handle_message(incomming_message, output_destination, expected_reply)
     }
 
     #[test]
     fn receive_action_message_and_pass_on_to_server() {
-        let output_type = handler::Outputs::Server;
-        let msg_to_send = r#"{"type": "Action", "message": "string"}"#;
+        let output_destination = handler::Outputs::Server;
+        let incomming_message = r#"{"type": "Action", "message": "string"}"#;
         let expected_reply = r#"{"type": "Action", "message": "string"}"#;
 
-        doit(output_type, msg_to_send, expected_reply)
+        create_client_and_handle_message(incomming_message, output_destination, expected_reply)
     }
 
-    fn doit(output_type: handler::Outputs, msg_to_send: &str, expected_reply: &str) {
+    fn create_client_and_handle_message(msg_to_send: &str, output_type: handler::Outputs, expected_reply: &str) {
         let (svr_inc_snd, svr_inc_rec) = crossbeam_channel::bounded(1);
         let (bot_inc_snd, bot_inc_rec) = crossbeam_channel::bounded(1);
 
